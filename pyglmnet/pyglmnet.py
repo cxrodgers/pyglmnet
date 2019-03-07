@@ -621,9 +621,6 @@ class GLM(BaseEstimator):
         beta: array
             (n_features + 1) x 1
             Updated parameters
-        z: array
-            beta[0] + X * beta[1:]
-            (n_features + 1) x 1
         """
         n_samples = X.shape[0]
         n_features = X.shape[1]
@@ -654,7 +651,7 @@ class GLM(BaseEstimator):
 
                 # Update parameters, z
                 update = 1. / hk * gk
-                beta[k] = beta[k] - update
+                beta[k], z = beta[k] - update, z - update * xk
         return beta
 
     def fit(self, X, y):
