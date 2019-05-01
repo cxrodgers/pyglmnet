@@ -622,6 +622,7 @@ class GLM(BaseEstimator):
             (n_features + 1) x 1
             Updated parameters
         """
+        print("z: %r" % z[:3])
         n_samples = X.shape[0]
         n_features = X.shape[1]
         reg_scale = rl * (1 - self.alpha)
@@ -651,7 +652,10 @@ class GLM(BaseEstimator):
 
                 # Update parameters, z
                 update = 1. / hk * gk
+                if np.isinf(update):
+                    1/0
                 beta[k], z = beta[k] - update, z - update * xk
+
         return beta
 
     def fit(self, X, y):
