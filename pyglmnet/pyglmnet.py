@@ -622,11 +622,11 @@ class GLM(BaseEstimator):
             (n_features + 1) x 1
             Updated parameters
         """
-        print("z: %r" % z[:3])
         n_samples = X.shape[0]
         n_features = X.shape[1]
         reg_scale = rl * (1 - self.alpha)
         z = beta[0] + np.dot(X, beta[1:])
+        print("z: %r" % z[:3])
 
         for k in range(0, n_features + 1):
             # Only update parameters in active set
