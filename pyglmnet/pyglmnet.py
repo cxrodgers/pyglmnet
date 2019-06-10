@@ -626,7 +626,7 @@ class GLM(BaseEstimator):
         n_features = X.shape[1]
         reg_scale = rl * (1 - self.alpha)
         z = beta[0] + np.dot(X, beta[1:])
-        print("z: %r" % z[:3])
+        #~ print("z: %r" % z[:3])
 
         # jasmainak fix: https://github.com/glm-tools/pyglmnet/issues/289
         for k in range(1, n_features + 1):
@@ -653,8 +653,8 @@ class GLM(BaseEstimator):
 
                 # Update parameters, z
                 update = 1. / hk * gk
-                if np.isinf(update):
-                    1/0
+                #~ if np.isinf(update):
+                    #~ 1/0
                 beta[k], z = beta[k] - update, z - update * xk
 
         return beta
