@@ -1,8 +1,6 @@
 """Python implementation of elastic-net regularized GLMs."""
 
 from copy import deepcopy
-from math import inf
-
 import numpy as np
 from scipy.special import expit
 from scipy.stats import norm
@@ -722,7 +720,7 @@ class GLM(BaseEstimator):
         # Iterative updates
         for t in range(0, self.max_iter):
             logger.info("t: %i" % t)
-            convergence_metric = inf
+            convergence_metric = np.inf
             if self.solver == 'batch-gradient':
                 grad = _grad_L2loss(self.distr,
                                     alpha, self.Tau,
