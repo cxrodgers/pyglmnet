@@ -461,7 +461,6 @@ class GLM(BaseEstimator):
                  solver='batch-gradient',
                  learning_rate=2e-1, max_iter=1000,
                  tol=1e-3, eta=2.0, score_metric='deviance',
-                 tol_relative_to_beta=False,
                  random_state=0, callback=None, verbose=False):
 
         if not isinstance(max_iter, int):
@@ -483,7 +482,6 @@ class GLM(BaseEstimator):
         self.beta_ = None
         self.ynull_ = None
         self.tol = tol
-        self.tol_relative_to_beta = tol_relative_to_beta
         self.eta = eta
         self.score_metric = score_metric
         self.random_state = random_state
@@ -734,18 +732,8 @@ class GLM(BaseEstimator):
                 beta_old = deepcopy(beta)
                 beta = \
                     self._cdfast(X, y, ActiveSet, beta, reg_lambda)
-                
-                # Calculate norm of the beta update
-                norm_beta_update = np.linalg.norm(beta - beta_old)
-                
-                # Threshold is either tol or tol * np.linalg.norm(beta)
-                if self.tol_relative_to_beta:
-                    threshold = tol * np.linalg.norm(beta)
-                else:
-                    threshold = tol
-                
-                # Converged if the norm(update) < threshold
-                if (t > 1) and (norm_beta_update < threshold):
+                # Converged if the norm(update) < tol
+                if (t > 1) and (np.linalg.norm(beta - beta_old) < tol):
                     msg = ('\tConverged in {0:d} iterations'.format(t))
                     logger.info(msg)
                     break
