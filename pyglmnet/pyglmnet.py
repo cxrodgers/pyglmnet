@@ -628,7 +628,8 @@ class GLM(BaseEstimator):
         z = beta[0] + np.dot(X, beta[1:])
         print("z: %r" % z[:3])
 
-        for k in range(0, n_features + 1):
+        # jasmainak fix: https://github.com/glm-tools/pyglmnet/issues/289
+        for k in range(1, n_features + 1):
             # Only update parameters in active set
             if ActiveSet[k] != 0:
                 if k > 0:
