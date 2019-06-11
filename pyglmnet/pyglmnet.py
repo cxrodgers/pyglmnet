@@ -462,7 +462,7 @@ class GLM(BaseEstimator):
                  solver='batch-gradient',
                  learning_rate=2e-1, max_iter=1000,
                  tol=1e-3, eta=2.0, score_metric='deviance',
-                 tol_relative_to_beta=False,
+                 rel_tol=None,
                  random_state=0, callback=None, verbose=False):
 
         if not isinstance(max_iter, int):
@@ -487,7 +487,7 @@ class GLM(BaseEstimator):
         self.beta_ = None
         self.ynull_ = None
         self.tol = tol
-        self.tol_relative_to_beta = tol_relative_to_beta
+        self.rel_tol = rel_tol
         self.eta = eta
         self.score_metric = score_metric
         self.random_state = random_state
@@ -760,9 +760,13 @@ class GLM(BaseEstimator):
                 self.convergence_metric_l.append(convergence_metric)
                 
                 # Threshold is either tol or tol * np.linalg.norm(beta)
-                if self.tol_relative_to_beta:
-                    threshold = tol * np.linalg.norm(beta)
+                if self.rel_tol is not None:
+                    # Take the higher of the relative and absolute tolerances
+                    threshold = np.max([
+                        self.rel_tol * np.linalg.norm(beta),
+                        tol])
                 else:
+                    # Take the absolute tolerance
                     threshold = tol
                 
                 # Converged if the norm(update) < threshold
