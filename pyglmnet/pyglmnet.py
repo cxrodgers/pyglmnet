@@ -7,6 +7,8 @@ from scipy.stats import norm
 from .utils import logger, set_log_level
 from .base import BaseEstimator, is_classifier, check_version
 
+class ConvergenceError(Exception):
+    pass
 
 ALLOWED_DISTRS = ['gaussian', 'binomial', 'softplus', 'poisson',
                   'probit', 'gamma']
@@ -479,6 +481,7 @@ class GLM(BaseEstimator):
         self.learning_rate = learning_rate
         self.max_iter = max_iter
         self.n_iter = 0
+        self.convergence_metric_l = []
         self.converged = False
         self.beta0_ = None
         self.beta_ = None
@@ -655,8 +658,8 @@ class GLM(BaseEstimator):
 
                 # Update parameters, z
                 update = 1. / hk * gk
-                #~ if np.isinf(update):
-                    #~ 1/0
+                if np.isinf(update):
+                    raise ConvergenceError("update is infinite")
                 beta[k], z = beta[k] - update, z - update * xk
 
         return beta
@@ -729,9 +732,13 @@ class GLM(BaseEstimator):
                 # Converged if the norm(gradient) < tol
                 convergence_metric = np.linalg.norm(grad)
                 logger.info("convergence_metric: %f" % convergence_metric)
+                
+                # Store convergence information
+                self.n_iter += 1
+                self.convergence_metric_l.append(convergence_metric)
+                
                 if (t > 1) and (convergence_metric < tol):
                     self.converged = True
-                    self.n_iter += t
                     msg = ('\tConverged in {0:d} iterations'
                            .format(self.n_iter))
                     logger.info(msg)
@@ -748,6 +755,10 @@ class GLM(BaseEstimator):
                 convergence_metric = np.linalg.norm(beta - beta_old)
                 logger.info("convergence_metric: %f" % convergence_metric)
                 
+                # Store convergence information
+                self.n_iter += 1
+                self.convergence_metric_l.append(convergence_metric)
+                
                 # Threshold is either tol or tol * np.linalg.norm(beta)
                 if self.tol_relative_to_beta:
                     threshold = tol * np.linalg.norm(beta)
@@ -757,7 +768,6 @@ class GLM(BaseEstimator):
                 # Converged if the norm(update) < threshold
                 if (t > 1) and (convergence_metric < threshold):
                     self.converged = True
-                    self.n_iter += t                    
                     msg = ('\tConverged in {0:d} iterations'.format(t))
                     logger.info(msg)
                     break
@@ -773,10 +783,10 @@ class GLM(BaseEstimator):
             # Compute and save loss if callbacks are requested
             if callable(self.callback):
                 self.callback(beta)
+    
         else:
             # Warn if it hit max_iter without converging
             self.converged = False
-            self.n_iter += t + 1
             msg = ('\t'
                    'Failed to converge after {0:d} iterations.'
                    ' Last convergence metric was {1:f}'
