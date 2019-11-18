@@ -1,3 +1,6 @@
+import subprocess
+import os.path as op
+
 from functools import partial
 import pytest
 import numpy as np
@@ -10,6 +13,7 @@ from scipy.optimize import approx_fprime
 from sklearn.datasets import make_regression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, cross_val_score, KFold
+from sklearn.linear_model import ElasticNet
 
 from pyglmnet import (GLM, GLMCV, _grad_L2loss, _L2loss, simulate_glm,
                       _gradhess_logloss_1d, _loss, datasets, ALLOWED_DISTRS)
@@ -116,7 +120,7 @@ def test_group_lasso():
     groups[60:] = 3
 
     # sample random coefficients
-    beta0 = np.random.normal(0.0, 1.0, 1)
+    beta0 = np.random.rand()
     beta = np.random.normal(0.0, 1.0, n_features)
     beta[groups == 2] = 0.
 
@@ -150,7 +154,9 @@ def test_group_lasso():
 
 
 @pytest.mark.parametrize("distr", ALLOWED_DISTRS)
-def test_glmnet(distr):
+@pytest.mark.parametrize("reg_lambda", [0.0, 0.1])
+@pytest.mark.parametrize("fit_intercept", [True, False])
+def test_glmnet(distr, reg_lambda, fit_intercept):
     """Test glmnet."""
     raises(ValueError, GLM, distr='blah')
     raises(ValueError, GLM, distr='gaussian', max_iter=1.8)
@@ -158,9 +164,11 @@ def test_glmnet(distr):
     n_samples, n_features = 100, 10
 
     # coefficients
-    beta0 = 1. / (np.float(n_features) + 1.) * \
-        np.random.normal(0.0, 1.0)
-    beta = 1. / (np.float(n_features) + 1.) * \
+    beta0 = 0.
+    if fit_intercept:
+        beta0 = 1. / (np.float(n_features) + 1.) * \
+            np.random.normal(0.0, 1.0)
+    beta = 1. / (np.float(n_features) + int(fit_intercept)) * \
         np.random.normal(0.0, 1.0, (n_features,))
 
     solvers = ['batch-gradient', 'cdfast']
@@ -182,22 +190,23 @@ def test_glmnet(distr):
                                sample=False)
 
         alpha = 0.
-        reg_lambda = 0.
         loss_trace = list()
+        eta = 2.0
+        group = None
+        Tau = None
 
         def callback(beta):
             Tau = None
-            eta = 2.0
-            group = None
-
             loss_trace.append(
                 _loss(distr, alpha, Tau, reg_lambda,
-                      X_train, y_train, eta, group, beta))
+                      X_train, y_train, eta, group, beta,
+                      fit_intercept=fit_intercept))
 
         glm = GLM(distr, learning_rate=learning_rate,
-                  reg_lambda=reg_lambda, tol=1e-3, max_iter=5000,
+                  reg_lambda=reg_lambda, tol=1e-5, max_iter=5000,
                   alpha=alpha, solver=solver, score_metric=score_metric,
-                  random_state=random_state, callback=callback)
+                  random_state=random_state, callback=callback,
+                  fit_intercept=fit_intercept)
         assert(repr(glm))
 
         glm.fit(X_train, y_train)
@@ -205,13 +214,15 @@ def test_glmnet(distr):
         # verify loss decreases
         assert(np.all(np.diff(loss_trace) <= 1e-7))
 
-        # verify loss at convergence = loss when beta=beta_
-        l_true = _loss(distr, 0., np.eye(beta.shape[0]), 0.,
-                       X_train, y_train, 2.0, None,
-                       np.concatenate(([beta0], beta)))
-        assert_allclose(loss_trace[-1], l_true, rtol=1e-4, atol=1e-5)
-        # beta=beta_ when reg_lambda = 0.
-        assert_allclose(beta, glm.beta_, rtol=0.05, atol=1e-2)
+        # true loss and beta should be recovered when reg_lambda == 0
+        if reg_lambda == 0.:
+            # verify loss at convergence = loss when beta=beta_
+            l_true = _loss(distr, alpha, Tau, reg_lambda,
+                           X_train, y_train, eta, group,
+                           np.concatenate(([beta0], beta)))
+            assert_allclose(loss_trace[-1], l_true, rtol=1e-4, atol=1e-5)
+            # beta=beta_ when reg_lambda = 0.
+            assert_allclose(beta, glm.beta_, rtol=0.05, atol=1e-2)
         betas_.append(glm.beta_)
 
         y_pred = glm.predict(X_train)
@@ -270,6 +281,10 @@ def test_glmcv(distr):
         y_pred = glm.predict(scaler.transform(X_train))
         assert(y_pred.shape[0] == X_train.shape[0])
 
+    # test picky score_metric check within fit().
+    glm.score_metric = 'bad_score_metric'  # reuse last glm
+    raises(ValueError, glm.fit, X_train, y_train)
+
 
 def test_cv():
     """Simple CV check."""
@@ -287,6 +302,38 @@ def test_cv():
                                              10, base=np.exp(1))}]
     glmcv = GridSearchCV(glm_normal, param_grid, cv=cv)
     glmcv.fit(X, y)
+
+
+@pytest.mark.parametrize("solver", ['batch-gradient', 'cdfast'])
+def test_compare_sklearn(solver):
+    """Test results against sklearn."""
+    def rmse(a, b):
+        return np.sqrt(np.mean((a - b) ** 2))
+
+    X, Y, coef_ = make_regression(
+        n_samples=1000, n_features=1000,
+        noise=0.1, n_informative=10, coef=True,
+        random_state=42)
+
+    alpha = 0.1
+    l1_ratio = 0.5
+
+    clf = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, tol=1e-5)
+    clf.fit(X, Y)
+    glm = GLM(distr='gaussian', alpha=l1_ratio, reg_lambda=alpha,
+              solver=solver, tol=1e-5, max_iter=70)
+    glm.fit(X, Y)
+
+    y_sk = clf.predict(X)
+    y_pg = glm.predict(X)
+    assert abs(rmse(Y, y_sk) - rmse(Y, y_pg)) < 1.0
+
+    glm = GLM(distr='gaussian', alpha=l1_ratio, reg_lambda=alpha,
+              solver=solver, tol=1e-5, max_iter=5, fit_intercept=False)
+    glm.fit(X, Y)
+    assert glm.beta0_ == 0.
+
+    glm.predict(X)
 
 
 @pytest.mark.parametrize("distr", ALLOWED_DISTRS)
@@ -339,20 +386,18 @@ def test_cdfast(distr):
 
     # test cdfast
     ActiveSet = np.ones(n_features + 1)
-    beta_ret, z_ret = glm._cdfast(X, y, z,
-                                  ActiveSet, beta_, glm.reg_lambda)
+    beta_ret = glm._cdfast(X, y, ActiveSet, beta_, glm.reg_lambda)
     assert(beta_ret.shape == beta_.shape)
-    assert(z_ret.shape == z.shape)
+    assert(True not in np.isnan(beta_ret))
 
 
 def test_fetch_datasets():
     """Test fetching datasets."""
-    datasets.fetch_community_crime_data('/tmp/glm-tools')
+    datasets.fetch_community_crime_data()
 
 
 def test_random_state_consistency():
-    """ Test model's random_state """
-
+    """Test model's random_state."""
     # Generate the dataset
     n_samples, n_features = 1000, 10
 
@@ -369,12 +414,12 @@ def test_random_state_consistency():
     ypred_a = glm_a.fit_predict(Xtrain, ytrain)
     glm_b = GLM(distr="gaussian", random_state=1)
     ypred_b = glm_b.fit_predict(Xtrain, ytrain)
-    ypred_c = glm_b.fit_predict(Xtrain, ytrain)
+    match = "This glm object has already been fit"
+    with pytest.raises(ValueError, match=match):
+        ypred_c = glm_b.fit_predict(Xtrain, ytrain)
 
     # Consistency between two different models
     assert_array_equal(ypred_a, ypred_b)
-    # Consistency between different run of the same model
-    assert_array_equal(ypred_b, ypred_c)
 
     # Test also cross-validation
     glm_cv_a = GLMCV(distr="gaussian", cv=3, random_state=1)
@@ -396,19 +441,25 @@ def test_simulate_glm(distr):
     n_samples, n_features = 10, 3
 
     # sample random coefficients
-    beta0 = state.normal(0.0, 1.0, 1)
+    beta0 = state.rand()
     beta = state.normal(0.0, 1.0, n_features)
 
     X = state.normal(0.0, 1.0, [n_samples, n_features])
     simulate_glm(distr, beta0, beta, X, random_state=random_state)
 
+    with pytest.raises(ValueError, match="'beta0' must be float"):
+        simulate_glm(distr, np.array([1.0]), beta, X, random_state)
+
+    with pytest.raises(ValueError, match="'beta' must be 1D"):
+        simulate_glm(distr, 1.0, np.atleast_2d(beta), X, random_state)
+
     # If the distribution name is garbage it will fail
     distr = 'multivariate_gaussian_poisson'
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="'distr' must be in"):
         simulate_glm(distr, 1.0, 1.0, np.array([[1.0]]))
 
 
-def test_api_input_types_y():
+def test_api_input():
     """Test that the input value of y can be of different types."""
 
     random_state = 1
@@ -432,3 +483,31 @@ def test_api_input_types_y():
     glm.fit(X, y)
     glm.predict(X)
     glm.score(X, y)
+    glm = GLM(distr='gaussian', solver='test')
+
+    with pytest.raises(ValueError, match="solver must be one of"):
+        glm.fit(X, y)
+
+    with pytest.raises(ValueError, match="fit_intercept must be"):
+        glm = GLM(distr='gaussian', fit_intercept='blah')
+
+    glm = GLM(distr='gaussian', max_iter=2)
+    with pytest.warns(UserWarning, match='Reached max number of iterat'):
+        glm.fit(X, y)
+
+
+def test_intro_example():
+    """Test that the intro example works."""
+    base, _ = op.split(op.realpath(__file__))
+    fname = op.join(base, '..', 'README.rst')
+
+    start_idx = 0  # where does Python code start?
+    code_lines = []
+    for idx, line in enumerate(open(fname, "r")):
+        if '.. code:: python' in line:
+            start_idx = idx
+        if start_idx > 0 and idx >= start_idx + 2:
+            if line.startswith('`More'):
+                break
+            code_lines.append(line.strip())
+    subprocess.run(['python', '-c', '\n'.join(code_lines)], check=True)

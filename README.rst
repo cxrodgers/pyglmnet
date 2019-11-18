@@ -6,9 +6,9 @@ A python implementation of elastic-net regularized generalized linear models
 
 |License| |Travis| |Codecov| |Circle| |Gitter| |DOI|
 
-.. raw:: html
+`[Documentation (stable version)]`_ `[Documentation (development version)]`_
 
-    <img src="pyglmnet-logo.png" height="400px">
+.. image:: https://user-images.githubusercontent.com/15852194/67919367-70482600-fb76-11e9-9b86-891969bd2bee.jpg
 
 `Generalized linear
 models <https://en.wikipedia.org/wiki/Generalized_linear_model>`__ are
@@ -38,8 +38,8 @@ specifically,
 and here are some of the highlights.
 
 -  Pyglmnet provides a wide range of noise models (and paired canonical
-   link functions): ``'gaussian'``, ``'binomial'``, ``'multinomial'``,
-   '``poisson``', and ``'softplus'``.
+   link functions): ``'gaussian'``, ``'binomial'``, ``'probit'``,
+   ``'gamma'``, '``poisson``', and ``'softplus'``.
 
 -  It supports a wide range of regularizers: ridge, lasso, elastic net,
    `group
@@ -68,94 +68,60 @@ and here are some of the highlights.
    easy to modify and introduce additional noise models and regularizers
    in the future.
 
-Benchmarks
-~~~~~~~~~~
-
-Here is table comparing ``pyglmnet`` against ``scikit-learn``'s
-``linear_model``, ``statsmodels``, and ``R``.
-
-The numbers below are run time (in milliseconds) to fit a :math:`1000`
-samples x :math:`100` predictors sparse matrix (density :math:`0.05`).
-This was done on a c. 2011 Macbook Pro, so your numbers may vary.
-
-+------------+------------+----------------+---------------+---------+
-| distr      | pyglmnet   | scikit-learn   | statsmodels   | R       |
-+============+============+================+===============+=========+
-| gaussian   | 6.8        | 1.2            | 29.8          | 10.3    |
-+------------+------------+----------------+---------------+---------+
-| binomial   | 16.3       | 4.5            | 89.3          | --      |
-+------------+------------+----------------+---------------+---------+
-| poisson    | 5.8        | --             | 117.2         | 156.1   |
-+------------+------------+----------------+---------------+---------+
-
-We provide a function called ``BenchMarkGLM()`` in ``pyglmnet.datasets``
-if you would like to run these benchmarks yourself, but you need to take
-care of the dependencies: ``scikit-learn``, ``Rpy2``, and
-``statsmodels`` yourself.
-
 Installation
 ~~~~~~~~~~~~
 
-Now ``pip`` installable!
+Install the stable PyPI version with ``pip``
 
 .. code:: bash
 
     $ pip install pyglmnet
 
-Manual installation instructions below:
+For the bleeding edge development version:
 
 Clone the repository.
 
 .. code:: bash
 
-    $ git clone http://github.com/glm-tools/pyglmnet
-
-Install ``pyglmnet`` using ``setup.py`` as follows
-
-.. code:: bash
-
-    $ python setup.py develop
+    $ pip install https://api.github.com/repos/glm-tools/pyglmnet/zipball/master
 
 Getting Started
 ~~~~~~~~~~~~~~~
 
 
 Here is an example on how to use the ``GLM`` estimator.
-.. This example is also found in examples/intro_example.py.
 
 .. code:: python
-   
+
    import numpy as np
    import scipy.sparse as sps
    from pyglmnet import GLM, simulate_glm
 
-   # create an instance of the GLM class
-   glm = GLM(distr="poisson")
-
-   # sample random coefficients
    n_samples, n_features = 1000, 100
-   beta0 = np.random.normal(0.0, 1.0, 1)
-   beta = sps.rand(n_features, 1, 0.1)
-   beta = np.array(beta.todense())
+   distr = 'poisson'
 
-   # simulate training data
-   X_train = np.random.normal(0.0, 1.0, [n_samples, n_features])
-   y_train = simulate_glm("poisson", beta0, beta, X_train)
+   # sample a sparse model
+   beta0 = np.random.rand()
+   beta = np.random.random(n_features)
+   beta[beta < 0.9] = 0
 
-   # simulate testing data
-   X_test = np.random.normal(0.0, 1.0, [n_samples, n_features])
-   y_test = simulate_glm("poisson", beta0, beta, X_test)
+   # simulate data
+   Xtrain = np.random.normal(0.0, 1.0, [n_samples, n_features])
+   ytrain = simulate_glm('poisson', beta0, beta, Xtrain)
+   Xtest = np.random.normal(0.0, 1.0, [n_samples, n_features])
+   ytest = simulate_glm('poisson', beta0, beta, Xtest)
+
+   # create an instance of the GLM class
+   glm = GLM(distr='poisson', score_metric='deviance')
 
    # fit the model on the training data
-   #scaler = StandardScaler().fit(X_train)
-   glm.fit(X_train, y_train)
+   glm.fit(Xtrain, ytrain)
 
    # predict using fitted model on the test data
-   yhat_test = glm.predict(X_test)
+   yhat = glm.predict(Xtest)
 
-   # score the model
-   deviance = glm.score(X_test, y_test)
-
+   # score the model on test data
+   deviance = glm.score(Xtest, ytest)
 
 `More pyglmnet examples and use
 cases <http://glm-tools.github.io/pyglmnet/auto_examples/index.html>`__.
@@ -179,7 +145,7 @@ How to contribute?
 ~~~~~~~~~~~~~~~~~~
 
 We welcome pull requests. Please see our `developer documentation
-page <http://glm-tools.github.io/pyglmnet/developers.html>`__ for more
+page <https://glm-tools.github.io/pyglmnet/contributing.html>`__ for more
 details.
 
 Acknowledgments
@@ -193,7 +159,7 @@ Acknowledgments
 License
 ~~~~~~~
 
-MIT License Copyright (c) 2016 Pavan Ramkumar
+MIT License Copyright (c) 2016-2019 Pavan Ramkumar
 
 .. |License| image:: https://img.shields.io/badge/license-MIT-blue.svg?style=flat
    :target: https://github.com/glm-tools/pyglmnet/blob/master/LICENSE
@@ -207,3 +173,5 @@ MIT License Copyright (c) 2016 Pavan Ramkumar
    :target: https://gitter.im/pavanramkumar/pyglmnet?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge
 .. |DOI| image:: https://zenodo.org/badge/55302570.svg
    :target: https://zenodo.org/badge/latestdoi/55302570
+.. _[Documentation (stable version)]: http://glm-tools.github.io/pyglmnet
+.. _[Documentation (development version)]: https://circleci.com/api/v1.1/project/github/glm-tools/pyglmnet/latest/artifacts/0/html/index.html?branch=master
