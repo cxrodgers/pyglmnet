@@ -562,13 +562,6 @@ class GLM(BaseEstimator):
         self.rng = np.random.RandomState(self.random_state)
         self.callback = callback
         self.verbose = verbose
-        
-        # These are set during fitting
-        self.niter = None
-        self.converged = False
-        self.loss_by_iter = []
-        self.loss = None
-        
         set_log_level(verbose)
 
     def _set_cv(cv, estimator=None, X=None, y=None):
@@ -825,7 +818,6 @@ class GLM(BaseEstimator):
             ActiveSet = np.ones_like(beta)
 
         # Iterative updates
-        self.converged = False
         for t in range(0, self.max_iter):
             self.n_iter_ += 1
             beta_old = beta.copy()
@@ -870,8 +862,6 @@ class GLM(BaseEstimator):
             # Compute and save loss if callbacks are requested
             if callable(self.callback):
                 self.callback(beta)
-            
-            logger.info('Iteration: %d. Loss: %f' % (self.niter, self.loss))
 
         if self.n_iter_ == self.max_iter:
             warnings.warn(
